@@ -12,6 +12,7 @@ or your dataset labels and thumbnails will fall out of sync.
 
 DOMAINS = {
     "gojo": {
+        "number": 1,
         "user_name": "Satoru Gojo",
         "domain_name": "Unlimited Void",
         "description": (
@@ -25,6 +26,7 @@ DOMAINS = {
         "bg_tint": (255, 120, 0),
     },
     "sukuna": {
+        "number": 2,
         "user_name": "Ryomen Sukuna",
         "domain_name": "Malevolent Shrine",
         "description": (
@@ -37,6 +39,7 @@ DOMAINS = {
         "bg_tint": (0, 0, 255),
     },
     "megumi": {
+        "number": 3,
         "user_name": "Megumi Fushiguro",
         "domain_name": "Chimera Shadow Garden",
         "description": (
@@ -49,6 +52,7 @@ DOMAINS = {
         "bg_tint": (80, 10, 0),
     },
     "mahito": {
+        "number": 4,
         "user_name": "Mahito",
         "domain_name": "Self-Embodiment of Perfection",
         "description": (
@@ -61,6 +65,7 @@ DOMAINS = {
         "bg_tint": (80, 0, 90),
     },
     "jogo": {
+        "number": 5,
         "user_name": "Jogo",
         "domain_name": "Coffin of the Iron Mountain",
         "description": (
@@ -73,6 +78,7 @@ DOMAINS = {
         "bg_tint": (0, 40, 200),
     },
     "yuta": {
+        "number": 6,
         "user_name": "Yuta Okkotsu",
         "domain_name": "Authentic Mutual Love",
         "description": (
@@ -86,17 +92,11 @@ DOMAINS = {
     },
 }
 
-# The "no gesture" resting class. Always collect this one too - without it
-# the classifier will constantly force a prediction into one of the real
-# domains even when your hands are just idling / talking / scratching your
-# nose.
-NEUTRAL_LABEL = "neutral"
-
-ALL_LABELS = list(DOMAINS.keys()) + [NEUTRAL_LABEL]
+# Number of extended fingers (summed across both hands, so e.g. 6 can be
+# shown as 5 on one hand + 1 on the other) -> which domain it casts.
+NUMBER_TO_DOMAIN = {cfg["number"]: key for key, cfg in DOMAINS.items()}
 
 # Tunable behavior
-SAMPLES_PER_CLASS = 250          # data collection target per class
-HOLD_FRAMES_TO_TRIGGER = 18      # consecutive confident frames (~0.6s @30fps)
-CONFIDENCE_THRESHOLD = 0.75      # model probability required to count a frame
+HOLD_FRAMES_TO_TRIGGER = 18      # consecutive frames showing the same number (~0.6s @30fps)
 COOLDOWN_SECONDS = 3.0           # min gap between two domain expansions
-DOMAIN_DISPLAY_SECONDS = 6.0     # how long the domain overlay stays up
+DOMAIN_DISPLAY_SECONDS = 6.0     # how long the domain overlay stays up (see effects.ACTIVE_DURATION)

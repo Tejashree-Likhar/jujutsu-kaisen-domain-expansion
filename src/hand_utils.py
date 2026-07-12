@@ -1,33 +1,17 @@
 """
 Wraps MediaPipe's HandLandmarker (new Tasks API - mediapipe >= 0.10.30
-removed the old `mp.solutions.hands` interface) and turns raw landmarks
-into a fixed-length, position/scale-invariant feature vector suitable
-for a classifier.
+removed the old `mp.solutions.hands` interface).
 
 On first use this downloads the official hand_landmarker.task model
 bundle (a few MB) from Google's model storage into models/, then reuses
 the cached copy on every later run.
-
-Feature vector layout (126 floats):
-  [0:63]   -> "left"  hand, 21 landmarks * (x, y, z), zeros if absent
-  [63:126] -> "right" hand, 21 landmarks * (x, y, z), zeros if absent
-
-Normalization per hand:
-  1. Translate so the wrist (landmark 0) sits at the origin.
-  2. Scale so the distance from wrist -> middle-finger MCP (landmark 9)
-     equals 1.0. This removes dependence on how close your hand is to
-     the camera and where it sits in the frame.
 """
 
 import os
 import time
 import urllib.request
-import numpy as np
 import cv2
 import mediapipe as mp
-
-NUM_LANDMARKS = 21
-VECTOR_LEN = NUM_LANDMARKS * 3 * 2  # two hands
 
 _MODEL_URL = (
     "https://storage.googleapis.com/mediapipe-models/hand_landmarker/"
@@ -81,7 +65,9 @@ class HandTracker:
         return ts
 
     def process(self, frame_bgr):
-        """frame_bgr: OpenCV BGR image. Returns a HandLandmarkerResult."""
+        """frame_bgr: OpenCV BGR image. Returns a HandLandmarkerResult with
+        .hand_landmarks (list of 21-landmark lists, each with .x/.y/.z in
+        [0,1]) and .handedness (list of Category lists)."""
         rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
         mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
         ts_ms = self._next_timestamp_ms()
@@ -99,34 +85,6 @@ class HandTracker:
                 cv2.circle(frame_bgr, (x, y), 3, (0, 255, 255), -1)
         return frame_bgr
 
-    @staticmethod
-    def _normalize_single_hand(landmarks):
-        pts = np.array([[lm.x, lm.y, lm.z] for lm in landmarks], dtype=np.float32)
-        wrist = pts[0].copy()
-        pts -= wrist
-        scale = np.linalg.norm(pts[9]) or 1e-6
-        pts /= scale
-        return pts.flatten()
-
-    def feature_vector(self, results):
-        """Returns a (126,) float32 vector, zero-padded for missing hands.
-        Also returns hands_present (0, 1, or 2) for gating logic."""
-        vec = np.zeros(VECTOR_LEN, dtype=np.float32)
-        hands_present = 0
-
-        if not results.hand_landmarks or not results.handedness:
-            return vec, hands_present
-
-        for hand_lms, handedness in zip(results.hand_landmarks, results.handedness):
-            label = handedness[0].category_name  # "Left" or "Right"
-            normalized = self._normalize_single_hand(hand_lms)
-            hands_present += 1
-            if label == "Left":
-                vec[0:63] = normalized
-            else:
-                vec[63:126] = normalized
-
-        return vec, hands_present
-
     def close(self):
         self._landmarker.close()
+
