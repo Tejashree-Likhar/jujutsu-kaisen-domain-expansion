@@ -18,9 +18,19 @@ geometry on MediaPipe's hand landmarks, so it works the moment you run it.
 
 Hold up a number of fingers (across one or both hands — e.g. show 6 as
 5 fingers on one hand + 1 on the other) and hold it steady for about
-0.6 seconds. That triggers the matching domain:
-- a particle swirl converges and spins in the domain's colors at the
-  center of the screen, then explodes into a full-screen colored tint
+0.6 seconds. That triggers the matching domain, rendered as a real
+particle field (~10,000 small points), the same general approach as
+[the reference project this was ported from](https://github.com/awnish9002/jjk)
+(which uses three.js/WebGL) - reimplemented in pure Python/numpy/OpenCV:
+- the ambient particle field spirals inward, spinning, and collapses
+  into a small glowing core in the domain's colors
+- the core bursts outward into that domain's actual shape - Sukuna's
+  shrine gets a bone-mountain floor, four dark pillars and a curved
+  glowing roof; Gojo's void gets a bright event-horizon ring inside a
+  deep shell of blue cosmic debris and gold dust; Jogo's gets a rising
+  volcanic cone with molten ground and drifting embers; and so on for
+  all six domains (see `src/particles3d.py` for each domain's exact
+  point-cloud shape)
 - **top-left:** domain name, user, description
 - **bottom-right:** an always-visible legend of which number casts which domain
 - your live camera stays visible the whole time in a small inset,
@@ -60,8 +70,20 @@ Open `config/domains.py` to adjust:
   field (derives `NUMBER_TO_DOMAIN` automatically).
 
 Open `src/effects.py` to adjust animation timing (`CONVERGE_DURATION`,
-`EXPLODE_DURATION`, `ACTIVE_DURATION`, `FADE_DURATION`) or particle count
-(`N_PARTICLES`).
+`EXPLODE_DURATION`, `ACTIVE_DURATION`, `FADE_DURATION`) or each domain's
+idle rotation while its shape is held (`_ACTIVE_SPIN`).
+
+Open `config/domains.py`'s `PARTICLE_COUNT` to trade density for
+performance - 10,000 runs comfortably in real time on a normal laptop
+CPU alongside the camera + hand tracking; drop it (e.g. to 5,000-6,000)
+if the window feels laggy on your machine, or raise it if you have
+headroom to spare for an even denser field.
+
+Open `src/particles3d.py` to redesign any domain's actual shape - each
+domain is one function (`shape_gojo`, `shape_sukuna`, etc.) returning
+per-particle 3D position, BGR color, and size arrays; mix in more/fewer
+particles for a given part of the shape (ground, pillars, ring, embers,
+...) by changing the fractional splits at the top of each function.
 
 Open `src/main.py` to adjust the camera inset size/position
 (`inset_w`, `margin`, `inset_x0`/`inset_y0` near the top of `main()`).
@@ -78,25 +100,15 @@ consistently for you, open `src/gesture.py` — `count_single_hand()` is
 short and easy to nudge (e.g. loosen or tighten the `1.15` thumb ratio,
 or the `0.02` finger-tip/pip margin).
 
-## Adding real background art
-
-Right now the "active" phase renders as a colored full-screen tint +
-vignette rather than swapping in a background image (to avoid bundling
-copyrighted anime frames into the project). If you want to drop in your
-own reference art per domain, put an image at `assets/domains/<key>.jpg`
-(keys: `gojo`, `sukuna`, `megumi`, `mahito`, `jogo`, `yuta`) and extend
-`DomainEffect.update_and_draw`'s `"active"` branch in `src/effects.py`
-to alpha-blend it in — the hook is there, just not wired up by default.
-
 ## Project structure
 
 ```
 config/domains.py       domain names/colors/descriptions/number mapping, tunable constants
 src/hand_utils.py        MediaPipe hand-landmark wrapper (tracking + drawing)
 src/gesture.py           rule-based finger counting (no ML, no training)
-src/effects.py           particle swirl/explode/active animation
+src/particles3d.py       per-domain 3D particle shapes + perspective projection
+src/effects.py           converge -> explode -> active -> fade animation, particle rendering
 src/ui.py                info panel + status text + instructions legend
 src/main.py              fullscreen app: camera inset, canvas compositing, quit handling
 models/                  auto-downloaded hand_landmarker.task cache
-assets/domains/          optional: your own background art per domain
 ```

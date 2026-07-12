@@ -12,6 +12,7 @@ or your dataset labels and thumbnails will fall out of sync.
 
 DOMAINS = {
     "gojo": {
+        "key": "gojo",
         "number": 1,
         "user_name": "Satoru Gojo",
         "domain_name": "Unlimited Void",
@@ -26,6 +27,7 @@ DOMAINS = {
         "bg_tint": (255, 120, 0),
     },
     "sukuna": {
+        "key": "sukuna",
         "number": 2,
         "user_name": "Ryomen Sukuna",
         "domain_name": "Malevolent Shrine",
@@ -39,6 +41,7 @@ DOMAINS = {
         "bg_tint": (0, 0, 255),
     },
     "megumi": {
+        "key": "megumi",
         "number": 3,
         "user_name": "Megumi Fushiguro",
         "domain_name": "Chimera Shadow Garden",
@@ -52,6 +55,7 @@ DOMAINS = {
         "bg_tint": (80, 10, 0),
     },
     "mahito": {
+        "key": "mahito",
         "number": 4,
         "user_name": "Mahito",
         "domain_name": "Self-Embodiment of Perfection",
@@ -65,6 +69,7 @@ DOMAINS = {
         "bg_tint": (80, 0, 90),
     },
     "jogo": {
+        "key": "jogo",
         "number": 5,
         "user_name": "Jogo",
         "domain_name": "Coffin of the Iron Mountain",
@@ -78,6 +83,7 @@ DOMAINS = {
         "bg_tint": (0, 40, 200),
     },
     "yuta": {
+        "key": "yuta",
         "number": 6,
         "user_name": "Yuta Okkotsu",
         "domain_name": "Authentic Mutual Love",
@@ -100,3 +106,6 @@ NUMBER_TO_DOMAIN = {cfg["number"]: key for key, cfg in DOMAINS.items()}
 HOLD_FRAMES_TO_TRIGGER = 18      # consecutive frames showing the same number (~0.6s @30fps)
 COOLDOWN_SECONDS = 3.0           # min gap between two domain expansions
 DOMAIN_DISPLAY_SECONDS = 6.0     # how long the domain overlay stays up (see effects.ACTIVE_DURATION)
+
+# Particle field (see src/particles3d.py + src/effects.py)
+PARTICLE_COUNT = 10000           # total particles in the swirl/domain-shape field

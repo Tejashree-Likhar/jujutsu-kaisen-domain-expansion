@@ -17,6 +17,7 @@ Usage:
 import os
 import sys
 import time
+import argparse
 from collections import deque, Counter
 
 import cv2
@@ -52,15 +53,49 @@ def get_screen_size(fallback=(1920, 1080)):
 
 
 def main():
-    screen_w, screen_h = get_screen_size()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--windowed", action="store_true",
+                         help="Run in a normal resizable window instead of "
+                              "fullscreen (useful for troubleshooting if the "
+                              "fullscreen window doesn't appear).")
+    parser.add_argument("--camera", type=int, default=0,
+                         help="Camera index, if you have more than one device.")
+    args = parser.parse_args()
 
+    screen_w, screen_h = get_screen_size()
+    print(f"Detected screen size: {screen_w}x{screen_h}")
+
+    print("Loading hand-landmark model (downloads once on first run)...")
     tracker = HandTracker()
-    cap = cv2.VideoCapture(0)
+
+    print(f"Opening camera index {args.camera}...")
+    cap = cv2.VideoCapture(args.camera)
     if not cap.isOpened():
-        raise SystemExit("Could not open camera.")
+        raise SystemExit(
+            f"Could not open camera index {args.camera}. Try --camera 1 "
+            "if you have more than one camera device."
+        )
 
     cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
-    cv2.setWindowProperty(WINDOW_NAME, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+    if not args.windowed:
+        # Move this window on-screen and actually show a frame BEFORE
+        # flipping it to fullscreen. On Windows, calling setWindowProperty(
+        # ...FULLSCREEN) on a brand-new window that has never displayed
+        # anything can leave it created-but-invisible with no error. Priming
+        # it with one real frame first avoids that.
+        cv2.moveWindow(WINDOW_NAME, 0, 0)
+        primer = np.zeros((screen_h, screen_w, 3), dtype=np.uint8)
+        cv2.putText(primer, "Starting camera...", (60, 80),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 255, 255), 2, cv2.LINE_AA)
+        cv2.imshow(WINDOW_NAME, primer)
+        cv2.waitKey(1)
+        cv2.setWindowProperty(WINDOW_NAME, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+
+    print("Window should be visible now. Press ESC or Q (with the window "
+          "focused) to quit.")
+    if args.windowed:
+        print("(running with --windowed; the window may be behind other apps"
+              " - check your taskbar / try Alt-Tab)")
 
     # Camera inset geometry: bottom-left corner, ~30% of screen width.
     inset_w = int(screen_w * 0.30)
@@ -78,6 +113,7 @@ def main():
         while True:
             ok, frame = cap.read()
             if not ok:
+                print("Camera stopped returning frames - exiting.")
                 break
             frame = cv2.flip(frame, 1)
 

@@ -1,70 +1,92 @@
 """
-Particle animation for a Domain Expansion "cast":
+Domain Expansion cast animation, rebuilt around a real particle field
+(see particles3d.py) instead of a flat color tint:
 
-  Phase 1 - CONVERGE : particles spawn at random positions around the
-            screen edges and spiral inward toward the center, all
-            rotating the same direction (galaxy-like).
-  Phase 2 - EXPLODE   : once converged, particles burst outward fast and
-            the screen flashes the domain color.
-  Phase 3 - ACTIVE     : a colored vignette / tint representing the
-            domain lingers over the feed while the info panel shows
-            name/user/description.
-  Phase 4 - FADE       : tint fades back out to the plain camera feed.
+  Phase 1 - CONVERGE : the ambient "neutral" particle field spirals inward
+             (spinning) and collapses into a small glowing core, in the
+             domain's own colors.
+  Phase 2 - EXPLODE   : that core bursts outward into the domain's actual
+             shape (Sukuna's shrine pillars/dome, Gojo's void ring, etc).
+  Phase 3 - ACTIVE     : the formed domain holds, with its own slow
+             ambient rotation, while the info panel shows name/user/desc.
+  Phase 4 - FADE       : the shape dims out to black.
 
-Usage:
-    fx = DomainEffect(width, height, domain_cfg)
-    fx.start()
-    ...
-    frame = fx.update_and_draw(frame)   # call every loop iteration
-    if fx.finished(): ...
+Rendering is fully vectorized numpy: thousands of small particles are
+projected to 2D and additively scattered onto a float buffer, then
+lightly blurred for glow - fast enough for real-time video without a
+GPU/WebGL, unlike drawing each particle with cv2.circle in a loop.
 """
 
+import sys
+import os
 import time
-import math
-import random
 import numpy as np
 import cv2
 
-CONVERGE_DURATION = 1.4
-EXPLODE_DURATION = 0.5
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from config.domains import PARTICLE_COUNT
+from src.particles3d import get_shape_fixed, rotate_z, rotate_y, project
+
+CONVERGE_DURATION = 1.3
+EXPLODE_DURATION = 0.7
 ACTIVE_DURATION = 6.0
 FADE_DURATION = 1.0
 
-N_PARTICLES = 140
+# Per-domain idle rotation while the shape is held (axis, radians/sec).
+# Locked (0 speed) domains read as heavier / more architectural.
+_ACTIVE_SPIN = {
+    "gojo": ("y", 0.25),
+    "sukuna": ("y", 0.0),
+    "megumi": ("y", 0.18),
+    "mahito": ("z", 0.35),
+    "jogo": ("y", 0.0),
+    "yuta": ("y", 0.30),
+}
 
 
-class _Particle:
-    __slots__ = ("angle", "radius", "start_radius", "speed", "color", "size")
+def _ease_in(t):
+    return t * t
 
-    def __init__(self, cx, cy, max_radius, colors):
-        self.angle = random.uniform(0, 2 * math.pi)
-        self.start_radius = random.uniform(max_radius * 0.5, max_radius)
-        self.radius = self.start_radius
-        self.speed = random.uniform(0.8, 1.6)
-        self.color = random.choice(colors)
-        self.size = random.randint(2, 4)
+
+def _ease_out(t):
+    return 1 - (1 - t) ** 3
+
+
+def _lerp(a, b, t):
+    return a + (b - a) * t
 
 
 class DomainEffect:
     def __init__(self, width, height, domain_cfg):
         self.w, self.h = width, height
         self.cfg = domain_cfg
-        self.colors = [domain_cfg["color_primary"], domain_cfg["color_secondary"]]
-        self.cx, self.cy = width // 2, height // 2
-        self.max_radius = math.hypot(width, height) * 0.55
-        self.particles = [
-            _Particle(self.cx, self.cy, self.max_radius, self.colors)
-            for _ in range(N_PARTICLES)
-        ]
+        self.key = domain_cfg["key"]
+        self.n = PARTICLE_COUNT
+
+        self.neutral_pos, self.neutral_col, self.neutral_size = get_shape_fixed("neutral", self.n)
+        self.domain_pos, self.domain_col, self.domain_size = get_shape_fixed(self.key, self.n)
+
+        rng = np.random.default_rng(7)
+        theta = rng.random(self.n) * 2 * np.pi
+        phi = np.arccos(2 * rng.random(self.n) - 1)
+        r = rng.random(self.n) * 3.0
+        self.core_pos = np.stack([
+            r * np.sin(phi) * np.cos(theta),
+            r * np.sin(phi) * np.sin(theta),
+            r * np.cos(phi),
+        ], axis=1)
+        core_color = np.clip(np.array(domain_cfg["color_primary"], dtype=np.float32) * 1.8, 0, 400)
+        self.core_col = np.tile(core_color, (self.n, 1))
+        self.core_size = np.full(self.n, 2.6, dtype=np.float32)
+
         self.phase = "idle"
         self.phase_start = 0.0
-        self.rotation_dir = 1  # spin direction, consistent through converge
+        self._frozen_pos = None  # snapshot used during fade
+        self.spin_axis, self.spin_speed = _ACTIVE_SPIN.get(self.key, ("y", 0.2))
 
     def start(self):
         self.phase = "converge"
         self.phase_start = time.time()
-        for p in self.particles:
-            p.radius = p.start_radius
 
     def finished(self):
         return self.phase == "idle"
@@ -94,57 +116,84 @@ class DomainEffect:
             return frame
 
         self._advance_phase_if_needed()
-        t = self._phase_elapsed()
-        overlay = np.zeros_like(frame)
+        t_raw = min(1.0, self._phase_elapsed() / self._phase_duration())
 
         if self.phase == "converge":
-            progress = min(t / CONVERGE_DURATION, 1.0)
-            spin = progress * 6.0 * self.rotation_dir  # radians of extra spin
-            for p in self.particles:
-                r = p.start_radius * (1 - progress) ** 1.5
-                ang = p.angle + spin * p.speed
-                x = int(self.cx + r * math.cos(ang))
-                y = int(self.cy + r * math.sin(ang) * 0.6)  # slight ellipse for style
-                cv2.circle(overlay, (x, y), p.size, p.color, -1)
-            # glowing core building up
-            core_r = int(10 + 40 * progress)
-            cv2.circle(overlay, (self.cx, self.cy), core_r, self.colors[0], -1)
-            frame = cv2.addWeighted(frame, 1.0, overlay, min(0.9, progress + 0.2), 0)
+            t = _ease_in(t_raw)
+            spin_angle = t_raw * 6.0  # a few fast turns while collapsing
+            spun = rotate_z(self.neutral_pos, spin_angle)
+            pos = _lerp(spun, self.core_pos, t)
+            col = _lerp(self.neutral_col, self.core_col, t)
+            size = _lerp(self.neutral_size, self.core_size, t)
 
         elif self.phase == "explode":
-            progress = min(t / EXPLODE_DURATION, 1.0)
-            for p in self.particles:
-                r = p.size + progress * self.max_radius * 1.3
-                x = int(self.cx + r * math.cos(p.angle))
-                y = int(self.cy + r * math.sin(p.angle))
-                cv2.circle(overlay, (x, y), max(1, int(p.size * (1 - progress) + 2)),
-                           p.color, -1)
-            frame = cv2.addWeighted(frame, 1.0, overlay, 1.0, 0)
-            # white/color flash fading out across the explosion
-            flash_alpha = (1 - progress) * 0.6
-            flash = np.full_like(frame, 255)
-            frame = cv2.addWeighted(frame, 1 - flash_alpha, flash, flash_alpha, 0)
+            t = _ease_out(t_raw)
+            pos = _lerp(self.core_pos, self.domain_pos, t)
+            col = _lerp(self.core_col, self.domain_col, t)
+            size = _lerp(self.core_size, self.domain_size, t)
+            decaying_spin = (1 - t_raw) * 4.0
+            pos = rotate_z(pos, decaying_spin)
+            self._frozen_pos = pos
 
         elif self.phase == "active":
-            tint = np.full_like(frame, self.cfg["bg_tint"], dtype=np.uint8)
-            frame = cv2.addWeighted(frame, 0.72, tint, 0.28, 0)
-            self._vignette(frame)
+            angle = self._phase_elapsed() * self.spin_speed
+            rot = rotate_y if self.spin_axis == "y" else rotate_z
+            pos = rot(self.domain_pos, angle)
+            col = self.domain_col
+            size = self.domain_size
+            self._frozen_pos = pos
 
-        elif self.phase == "fade":
-            progress = min(t / FADE_DURATION, 1.0)
-            alpha = 0.28 * (1 - progress)
-            tint = np.full_like(frame, self.cfg["bg_tint"], dtype=np.uint8)
-            frame = cv2.addWeighted(frame, 1 - alpha, tint, alpha, 0)
+        else:  # fade
+            fade_amount = 1 - t_raw
+            pos = self._frozen_pos if self._frozen_pos is not None else self.domain_pos
+            col = self.domain_col * fade_amount
+            size = self.domain_size
 
-        return frame
+        return self._render(frame, pos, col, size)
 
-    def _vignette(self, frame):
-        h, w = frame.shape[:2]
-        mask = np.zeros((h, w), dtype=np.uint8)
-        cv2.ellipse(mask, (w // 2, h // 2), (int(w * 0.7), int(h * 0.7)),
-                    0, 0, 360, 255, -1)
-        mask = cv2.GaussianBlur(mask, (99, 99), 0)
-        mask3 = cv2.merge([mask, mask, mask]).astype(np.float32) / 255.0
-        dark = (frame.astype(np.float32) * 0.55).astype(np.uint8)
-        frame[:] = (frame.astype(np.float32) * mask3 +
-                    dark.astype(np.float32) * (1 - mask3)).astype(np.uint8)
+    def _phase_duration(self):
+        return {
+            "converge": CONVERGE_DURATION,
+            "explode": EXPLODE_DURATION,
+            "active": ACTIVE_DURATION,
+            "fade": FADE_DURATION,
+        }.get(self.phase, 1.0)
+
+    def _render(self, frame, pos3d, colors, sizes):
+        xy, scale = project(pos3d, self.w, self.h)
+        x, y = xy[:, 0], xy[:, 1]
+        valid = (
+            np.isfinite(x) & np.isfinite(y)
+            & (x >= 0) & (x < self.w) & (y >= 0) & (y < self.h)
+        )
+        if not np.any(valid):
+            return frame
+
+        xi = x[valid].astype(np.int32)
+        yi = y[valid].astype(np.int32)
+        c = colors[valid]
+        depth_weight = np.clip(scale[valid] / 8.0, 0.35, 2.2)
+        s = sizes[valid] * depth_weight
+        weighted = c * s[:, None]
+
+        accum = np.zeros((self.h, self.w, 3), dtype=np.float32)
+        # Additive "plus" splat instead of a Gaussian blur: a real blur
+        # normalizes/averages, which quietly halves a lone lit pixel's
+        # peak brightness. Adding to a couple of neighbors instead keeps
+        # each particle a small, bright, crisp dot rather than a dim smear.
+        np.add.at(accum, (yi, xi), weighted)
+        for dy, dx, wgt in ((-1, 0, 0.35), (1, 0, 0.35), (0, -1, 0.35), (0, 1, 0.35)):
+            yy = np.clip(yi + dy, 0, self.h - 1)
+            xx = np.clip(xi + dx, 0, self.w - 1)
+            np.add.at(accum, (yy, xx), weighted * wgt)
+
+        # Soft ambient bloom/glow, computed at low resolution (cheap) and
+        # blended back in lightly so clusters get an atmospheric halo
+        # without washing out the crisp particle cores above.
+        small = cv2.resize(accum, (self.w // 4, self.h // 4), interpolation=cv2.INTER_AREA)
+        bloom_small = cv2.GaussianBlur(small, (9, 9), 0)
+        bloom = cv2.resize(bloom_small, (self.w, self.h), interpolation=cv2.INTER_LINEAR)
+        accum = accum + bloom * 0.6
+        accum = np.clip(accum, 0, 255).astype(np.uint8)
+
+        return cv2.add(frame, accum)
