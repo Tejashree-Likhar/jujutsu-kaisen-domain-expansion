@@ -1,0 +1,9 @@
+mediapipe>=0.10.30
+numpy
+scikit-learn>=1.4
+joblib>=1.3
+
+# mediapipe pulls in opencv-contrib-python (which provides the `cv2` module
+# used throughout this project) as one of its own dependencies, so it does
+# not need to be listed separately here. Listing opencv-python alongside it
+# causes two different packages to fight over the same `cv2` module.
