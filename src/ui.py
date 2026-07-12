@@ -60,18 +60,19 @@ class InstructionsPanel:
     """Always-visible bottom-right gallery: one thumbnail + label per
     trained sign, loaded once from assets/signs/<label>.jpg."""
 
-    THUMB_SIZE = 64
+    MAX_THUMB_SIZE = 64
+    MIN_THUMB_SIZE = 30
     PADDING = 8
+    PANEL_W = 300
+    LABEL_H = 26  # space reserved above the panel for the "Sign Reference" title
 
     def __init__(self, root_dir, labels, domains_cfg, neutral_label):
-        self.thumbs = {}
+        self.raw_thumbs = {}
         thumb_dir = os.path.join(root_dir, "assets", "signs")
         for label in labels:
             path = os.path.join(thumb_dir, f"{label}.jpg")
             img = cv2.imread(path) if os.path.exists(path) else None
-            if img is not None:
-                img = cv2.resize(img, (self.THUMB_SIZE, self.THUMB_SIZE))
-            self.thumbs[label] = img
+            self.raw_thumbs[label] = img  # kept at native size, resized per-draw
 
         self.entries = []
         for label in labels:
@@ -84,31 +85,43 @@ class InstructionsPanel:
 
     def draw(self, frame):
         h, w = frame.shape[:2]
-        row_h = self.THUMB_SIZE + self.PADDING
-        panel_h = row_h * len(self.entries) + self.PADDING
-        panel_w = 300
+        n = max(1, len(self.entries))
+
+        # Fit thumbnails to whatever vertical space is actually available in
+        # this frame (webcams commonly deliver 480p, not the 720p this was
+        # first designed against), shrinking below MAX_THUMB_SIZE if needed.
+        available_h = max(1, h - self.LABEL_H - 10)
+        thumb_size = min(
+            self.MAX_THUMB_SIZE,
+            max(self.MIN_THUMB_SIZE, available_h // n - self.PADDING),
+        )
+        row_h = thumb_size + self.PADDING
+        panel_h = row_h * n + self.PADDING
+        panel_w = self.PANEL_W
         x0 = w - panel_w
-        y0 = h - panel_h
+        y0 = max(self.LABEL_H, h - panel_h)
 
         overlay = frame.copy()
         cv2.rectangle(overlay, (x0, y0), (w, h), (15, 15, 15), -1)
         frame[:] = cv2.addWeighted(overlay, 0.6, frame, 0.4, 0)
-        cv2.putText(frame, "Sign Reference", (x0 + 10, y0 - 10),
+        cv2.putText(frame, "Sign Reference", (x0 + 10, max(18, y0 - 10)),
                     FONT, 0.55, (255, 255, 255), 2, cv2.LINE_AA)
 
         y = y0 + self.PADDING
         for label, name in self.entries:
-            thumb = self.thumbs.get(label)
+            raw = self.raw_thumbs.get(label)
             tx = x0 + self.PADDING
-            if thumb is not None:
-                frame[y:y + self.THUMB_SIZE, tx:tx + self.THUMB_SIZE] = thumb
+            if raw is not None:
+                thumb = cv2.resize(raw, (thumb_size, thumb_size))
+                frame[y:y + thumb_size, tx:tx + thumb_size] = thumb
             else:
-                cv2.rectangle(frame, (tx, y), (tx + self.THUMB_SIZE, y + self.THUMB_SIZE),
+                cv2.rectangle(frame, (tx, y), (tx + thumb_size, y + thumb_size),
                               (60, 60, 60), -1)
-                cv2.putText(frame, "?", (tx + 24, y + 40), FONT, 0.8, (150, 150, 150), 2)
+                cv2.putText(frame, "?", (tx + thumb_size // 3, y + int(thumb_size * 0.65)),
+                            FONT, 0.6, (150, 150, 150), 2)
 
-            text_x = tx + self.THUMB_SIZE + 10
-            text_y = y + self.THUMB_SIZE // 2 + 5
+            text_x = tx + thumb_size + 10
+            text_y = y + thumb_size // 2 + 5
             cv2.putText(frame, name, (text_x, text_y), FONT, 0.45,
                         (255, 255, 255), 1, cv2.LINE_AA)
             y += row_h
