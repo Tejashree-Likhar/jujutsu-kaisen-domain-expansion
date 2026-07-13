@@ -19,15 +19,15 @@ geometry on MediaPipe's hand landmarks, so it works the moment you run it.
 Hold up a number of fingers (across one or both hands — e.g. show 6 as
 5 fingers on one hand + 1 on the other) and hold it steady for about
 0.6 seconds. That triggers the matching domain, rendered as a real
-particle field (~10,000 small points), the same general approach as
-[the reference project this was ported from](https://github.com/awnish9002/jjk)
-(which uses three.js/WebGL) - reimplemented in pure Python/numpy/OpenCV:
+particle field (~10,000 small points):
 - the ambient particle field spirals inward, spinning, and collapses
   into a small glowing core in the domain's colors
 - the core bursts outward into that domain's actual shape - Sukuna's
   shrine gets a bone-mountain floor, four dark pillars and a curved
   glowing roof; Gojo's void gets a bright event-horizon ring inside a
-  deep shell of blue cosmic debris and gold dust; Jogo's gets a rising
+  deep shell of blue cosmic debris and gold dust; Yuta's is a shrine
+  built the same way but in his pink/white palette, ringed by 22
+  katana planted upright around its perimeter; Jogo's gets a rising
   volcanic cone with molten ground and drifting embers; and so on for
   all six domains (see `src/particles3d.py` for each domain's exact
   point-cloud shape)
@@ -110,5 +110,9 @@ src/particles3d.py       per-domain 3D particle shapes + perspective projection
 src/effects.py           converge -> explode -> active -> fade animation, particle rendering
 src/ui.py                info panel + status text + instructions legend
 src/main.py              fullscreen app: camera inset, canvas compositing, quit handling
-models/                  auto-downloaded hand_landmarker.task cache
+models/                  auto-downloaded hand_landmarker.task cache (.task file is gitignored)
 ```
+
+## License
+
+MIT — see [LICENSE](LICENSE).
