@@ -43,6 +43,20 @@ def _ring(n, radius, thickness, rng):
     return np.stack([x, y, z], axis=1)
 
 
+def _infinity(n, scale, thickness, rng):
+    """Points along a lemniscate-of-Bernoulli (infinity sign), with a
+    tube of `thickness` around the curve so it reads as a solid loop
+    rather than a thin wire."""
+    t = rng.random(n) * 2 * np.pi
+    denom = 1 + np.sin(t) ** 2
+    x = scale * np.cos(t) / denom
+    y = scale * np.sin(t) * np.cos(t) / denom
+    x += rng.normal(scale=thickness * 0.4, size=n)
+    y += rng.normal(scale=thickness * 0.4, size=n)
+    z = rng.normal(scale=thickness * 0.4, size=n)
+    return np.stack([x, y, z], axis=1)
+
+
 def _ground_plane(n, half_size, y_level, rng, y_jitter=1.5):
     x = (rng.random(n) - 0.5) * 2 * half_size
     z = (rng.random(n) - 0.5) * 2 * half_size
@@ -127,14 +141,14 @@ def shape_neutral(n, seed=0):
 
 
 def shape_gojo(n, seed=1):
-    """Unlimited Void: bright event-horizon ring + a deep cosmic shell of
-    blue debris flecked with golden galactic dust."""
+    """Unlimited Void: bright event-horizon infinity loop + a deep cosmic
+    shell of blue debris flecked with golden galactic dust."""
     rng = np.random.default_rng(seed)
     n_ring = int(n * 0.12)
     n_dust_gold = int(n * 0.25)
     n_rest = n - n_ring - n_dust_gold
 
-    ring_pos = _ring(n_ring, radius=26, thickness=3, rng=rng)
+    ring_pos = _infinity(n_ring, scale=30, thickness=4, rng=rng)
     ring_col = np.tile(np.array([180, 230, 255], dtype=np.float32), (n_ring, 1))  # bright gold-white
     ring_size = np.full(n_ring, 2.2, dtype=np.float32)
 
@@ -240,16 +254,17 @@ def shape_megumi(n, seed=3):
 
 
 def shape_mahito(n, seed=4):
-    """Self-Embodiment of Perfection: an empty spherical cage woven from
+    """Self-Embodiment of Perfection: a spherical cage woven from
     latitude/longitude netting, glowing node-spheres at every crossing,
-    hovering over a cracked floor. Tilted so we're looking down into the
-    dome from above, like the dome resting in a crater - nothing trapped
-    inside, just the endless mesh itself."""
+    a figure standing at its center, hovering over a cracked floor.
+    Tilted so we're looking down into the dome from above, like the dome
+    resting in a crater."""
     rng = np.random.default_rng(seed)
-    n_grid = int(n * 0.50)
-    n_nodes = int(n * 0.16)
-    n_ground = int(n * 0.10)
-    n_ambient = n - n_grid - n_nodes - n_ground
+    n_grid = int(n * 0.44)
+    n_nodes = int(n * 0.14)
+    n_ground = int(n * 0.09)
+    n_human = int(n * 0.15)
+    n_ambient = n - n_grid - n_nodes - n_ground - n_human
 
     R = 42
     cy = 4  # dome center sits a bit above the ground
@@ -318,13 +333,24 @@ def shape_mahito(n, seed=4):
     ground_col = np.tile(np.array([60, 15, 55], dtype=np.float32), (ground_pos.shape[0], 1))
     ground_size = np.full(ground_pos.shape[0], 0.5, dtype=np.float32)
 
+    # --- the figure standing at the center of the dome, on the ground ---
+    human_scale = 0.9
+    foot_y = ground_y + 1
+    human_origin_y = foot_y + 28 * human_scale
+    human_pos = _human_figure(n_human, rng, origin=(0, human_origin_y, 0), scale=human_scale, reach_up=False)
+    # Warm, bright pale skin - deliberately far lighter than the dark
+    # purple net/background so the figure actually pops instead of
+    # blending into the mesh around it.
+    human_col = np.tile(np.array([140, 165, 215], dtype=np.float32), (human_pos.shape[0], 1))
+    human_size = np.full(human_pos.shape[0], 1.4, dtype=np.float32)
+
     ambient_pos = _sphere_shell(n_ambient, 30, 110, rng)
     ambient_col = np.tile(np.array([55, 8, 45], dtype=np.float32), (n_ambient, 1))
     ambient_size = np.full(n_ambient, 0.4, dtype=np.float32)
 
-    pos = np.concatenate([grid_pos, node_pos, ground_pos, ambient_pos])
-    col = np.concatenate([grid_col, node_col, ground_col, ambient_col])
-    size = np.concatenate([grid_size, node_size, ground_size, ambient_size])
+    pos = np.concatenate([grid_pos, node_pos, ground_pos, human_pos, ambient_pos])
+    col = np.concatenate([grid_col, node_col, ground_col, human_col, ambient_col])
+    size = np.concatenate([grid_size, node_size, ground_size, human_size, ambient_size])
 
     # Tilt so the near/top of the dome swings toward the camera and grows
     # large in frame while the far side recedes - the "looking down into
@@ -369,18 +395,19 @@ def shape_jogo(n, seed=5):
 
 
 def shape_yuta(n, seed=6):
-    """Authentic Mutual Love: a clearly visible ring facing the viewer,
-    encircled by katana lying flat, radiating outward like spokes in the
-    ring's own plane."""
+    """Authentic Mutual Love: a ring facing the viewer at a shallow angle,
+    encircled by katana standing upright, piercing through its
+    circumference like a crown of blades."""
     rng = np.random.default_rng(seed)
     n_blades = int(n * 0.40)
     n_knot = int(n * 0.28)
     n_dust = n - n_blades - n_knot
 
-    # Ring / knot motif: built facing the camera, then tilted toward
-    # horizontal so it reads like a ring resting on a flat surface (seen
-    # at an angle) rather than a flat line seen edge-on or a coin facing
-    # you dead-on.
+    # Ring / knot motif: built facing the camera, then tilted only
+    # modestly so it reads as a clean halo/oval (a steeper tilt makes the
+    # near/far edges scale so unevenly under perspective that the ring
+    # reads as a tall vertical sliver instead of a ring).
+    TILT = np.radians(25)
     R, r_minor = 24, 6
     main_angle = rng.random(n_knot) * 2 * np.pi
     tube_angle = rng.random(n_knot) * 2 * np.pi
@@ -389,39 +416,41 @@ def shape_yuta(n, seed=6):
         (R + r_minor * np.cos(tube_angle)) * np.sin(main_angle),
         r_minor * np.sin(tube_angle),
     ], axis=1)
-    knot_pos = rotate_x(knot_pos, np.radians(72))
+    knot_pos = rotate_x(knot_pos, TILT)
     knot_col = np.tile(np.array([170, 20, 255], dtype=np.float32), (n_knot, 1))  # vibrant pink
     knot_size = np.full(n_knot, 1.1, dtype=np.float32)
 
-    # Katana laid flat, radiating outward from the ring like spokes -
-    # built in the SAME plane as the ring (before its tilt) and then
-    # tilted together with it, so each blade stays coplanar with the
-    # ring's circumference no matter how the whole shape spins.
+    # Katana standing upright (extending in world-Y, like stakes), each
+    # anchored to a point on the ring's circumference - anchors are
+    # computed by tilting the same pre-tilt angle used for the ring, so
+    # the blades pierce through exactly where the ring sits. Because the
+    # blades stay vertical rather than following the ring's tilt, the
+    # whole thing spins cleanly around the vertical axis with no
+    # crossing/"+" artifacts.
     n_swords = 26
     per_sword = max(1, n_blades // n_swords)
-    Rs = R + 17
     blade_chunks, blade_col_chunks = [], []
     for i in range(n_swords):
         angle = i * (2 * np.pi / n_swords) + rng.uniform(-0.05, 0.05)
-        dir_x, dir_y = np.cos(angle), np.sin(angle)
-        length = rng.uniform(16, 26)
+        anchor_r = R + rng.uniform(-2, 2)
+        anchor_local = np.array([[anchor_r * np.cos(angle), anchor_r * np.sin(angle), 0.0]], dtype=np.float32)
+        ax, ay, az = rotate_x(anchor_local, TILT)[0]
+        length = rng.uniform(18, 28)
 
-        t_local = rng.random(per_sword)  # 0 = hilt (near ring), 1 = tip (outward)
-        r = Rs + (t_local - 0.15) * length
-        x = r * dir_x + rng.normal(scale=0.6, size=per_sword)
-        y = r * dir_y + rng.normal(scale=0.6, size=per_sword)
-        z = (rng.random(per_sword) - 0.5) * 3
+        t_local = rng.random(per_sword)  # 0 = tip below the ring, 1 = tip above
+        y = ay + (t_local - 0.3) * length
+        x = ax + rng.normal(scale=0.6, size=per_sword)
+        z = az + rng.normal(scale=0.6, size=per_sword)
         blade_chunks.append(np.stack([x, y, z], axis=1))
 
         col = np.tile(np.array([235, 230, 255], dtype=np.float32), (per_sword, 1))  # silver-white blade
-        guard_mask = (t_local > 0.06) & (t_local < 0.14)
+        guard_mask = (t_local > 0.26) & (t_local < 0.34)
         col[guard_mask] = np.array([210, 90, 150], dtype=np.float32)  # small pink hilt/guard accent
         blade_col_chunks.append(col)
 
     blade_pos = np.concatenate(blade_chunks)
     blade_col = np.concatenate(blade_col_chunks)
     blade_size = np.full(blade_pos.shape[0], 0.85, dtype=np.float32)
-    blade_pos = rotate_x(blade_pos, np.radians(72))
 
     dust_pos = _sphere_shell(n_dust, 15, 90, rng)
     dust_col = np.tile(np.array([200, 150, 255], dtype=np.float32), (n_dust, 1))  # soft pink sparkle

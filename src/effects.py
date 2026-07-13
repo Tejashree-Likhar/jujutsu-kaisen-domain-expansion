@@ -36,10 +36,10 @@ FADE_DURATION = 1.0
 # Locked (0 speed) domains read as heavier / more architectural.
 _ACTIVE_SPIN = {
     "gojo": ("y", 0.25),
-    "sukuna": ("y", 0.0),
+    "sukuna": ("y", 0.18),
     "megumi": ("y", 0.15),
     "mahito": ("y", 0.12),
-    "jogo": ("y", 0.0),
+    "jogo": ("y", 0.18),
     "yuta": ("y", 0.30),
 }
 
