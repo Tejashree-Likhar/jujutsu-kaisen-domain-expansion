@@ -395,63 +395,80 @@ def shape_jogo(n, seed=5):
 
 
 def shape_yuta(n, seed=6):
-    """Authentic Mutual Love: two overlapping wedding-ring loops (the
-    'intertwined wedding knots') forming one long, flattened
-    infinity-like sweep across the frame, with a bright pink core and
-    a soft white sparkle haze pooling around each loop's center - the
-    katana read here as glowing white light bleeding out of the rings
-    rather than distinct upright blades. The whole field is tilted so
-    it reads as a diagonal streak, matching the reference cast image."""
+    """Authentic Mutual Love: a shrine in the same spirit as Sukuna's
+    (ground, pillars, curved roof, drifting haze) but told entirely in
+    Yuta's pink/white palette, with a ring of katana planted upright
+    around its perimeter like a crown of blades guarding the shrine -
+    that ring of swords is what sets it apart from Sukuna's version."""
     rng = np.random.default_rng(seed)
-    n_loops = int(n * 0.42)
-    n_sparkle = int(n * 0.36)
-    n_dust = n - n_loops - n_sparkle
+    n_ground = int(n * 0.24)
+    n_pillars = int(n * 0.10)
+    n_roof = int(n * 0.16)
+    n_katana = int(n * 0.26)
+    n_haze = n - n_ground - n_pillars - n_roof - n_katana
 
-    R, thickness = 34, 5
-    flatten = 0.55  # squashes each loop into a wide ellipse, not a circle
-    centers_x = (-R * 0.65, R * 0.65)  # two ring centers, side by side
+    ground_pos = _ground_plane(n_ground, half_size=55, y_level=-20, rng=rng, y_jitter=3)
+    ground_col = np.tile(np.array([200, 190, 235], dtype=np.float32), (n_ground, 1))  # pale rose-marble
+    ground_size = np.full(n_ground, 0.8, dtype=np.float32)
 
-    def _ring_loop(n_pts, cx, rng):
-        theta = rng.random(n_pts) * 2 * np.pi
-        rr = R + (rng.random(n_pts) - 0.5) * thickness
-        x = cx + rr * np.cos(theta)
-        y = rr * np.sin(theta) * flatten
-        z = (rng.random(n_pts) - 0.5) * thickness
-        return np.stack([x, y, z], axis=1)
+    # 4 pillar footprints (like a torii gate's support beams)
+    corner_choice = rng.integers(0, 4, n_pillars)
+    px = np.where(corner_choice % 2 == 0, 14.0, -14.0)
+    pz = np.where(corner_choice < 2, 9.0, -9.0)
+    pillar_pos = np.stack([
+        px + (rng.random(n_pillars) - 0.5) * 2,
+        -20 + rng.random(n_pillars) * 38,
+        pz + (rng.random(n_pillars) - 0.5) * 2,
+    ], axis=1)
+    pillar_col = np.tile(np.array([170, 90, 210], dtype=np.float32), (n_pillars, 1))  # soft orchid pillar
+    pillar_size = np.full(n_pillars, 1.3, dtype=np.float32)
 
-    per_loop = n_loops // 2
-    loopA_pos = _ring_loop(per_loop, centers_x[0], rng)
-    loopB_pos = _ring_loop(n_loops - per_loop, centers_x[1], rng)
-    loop_pos = np.concatenate([loopA_pos, loopB_pos])
-    loop_col = np.tile(np.array([190, 30, 255], dtype=np.float32), (loop_pos.shape[0], 1))  # vibrant pink
-    loop_size = np.full(loop_pos.shape[0], 1.3, dtype=np.float32)
+    t = rng.random(n_roof) * 2 * np.pi
+    rad = rng.random(n_roof) * 32
+    curve = (rad / 32) ** 2 * 12
+    roof_pos = np.stack([
+        rad * np.cos(t),
+        18 - curve + rng.random(n_roof) * 2,
+        rad * np.sin(t) * 0.6,
+    ], axis=1)
+    roof_col = np.tile(np.array([220, 210, 255], dtype=np.float32), (n_roof, 1))  # glowing white-pink
+    roof_size = np.full(n_roof, 1.1, dtype=np.float32)
 
-    # Bright white-pink sparkle haze pooling around each loop's center -
-    # denser near the middle of each ring, thinning toward its edge, which
-    # is what reads as the soft glowing "poof" at each end of the shape.
-    which = rng.integers(0, 2, n_sparkle)
-    cx = np.where(which == 0, centers_x[0], centers_x[1])
-    ang = rng.random(n_sparkle) * 2 * np.pi
-    rad = (R + thickness * 2) * np.sqrt(rng.random(n_sparkle))
-    x = cx + rad * np.cos(ang)
-    y = rad * np.sin(ang) * flatten
-    z = rng.normal(scale=thickness * 1.6, size=n_sparkle)
-    sparkle_pos = np.stack([x, y, z], axis=1)
-    sparkle_col = np.tile(np.array([255, 240, 255], dtype=np.float32), (n_sparkle, 1))  # near-white
-    sparkle_size = np.full(n_sparkle, 0.7, dtype=np.float32)
+    # Katana planted upright in a ring around the shrine's perimeter,
+    # like blades guarding the grounds - this is the piece that makes
+    # the shrine read as Yuta's rather than Sukuna's.
+    n_swords = 22
+    per_sword = max(1, n_katana // n_swords)
+    blade_chunks, blade_col_chunks = [], []
+    for i in range(n_swords):
+        angle = i * (2 * np.pi / n_swords) + rng.uniform(-0.04, 0.04)
+        anchor_r = 46 + rng.uniform(-3, 3)
+        ax = anchor_r * np.cos(angle)
+        az = anchor_r * np.sin(angle)
+        length = rng.uniform(22, 34)
 
-    dust_pos = _sphere_shell(n_dust, 20, 100, rng)
-    dust_col = np.tile(np.array([200, 150, 255], dtype=np.float32), (n_dust, 1))  # soft pink sparkle
-    dust_size = np.full(n_dust, 0.45, dtype=np.float32)
+        t_local = rng.random(per_sword)  # 0 = hilt at ground, 1 = tip skyward
+        y = -20 + t_local * length
+        x = ax + rng.normal(scale=0.6, size=per_sword)
+        z = az + rng.normal(scale=0.6, size=per_sword)
+        blade_chunks.append(np.stack([x, y, z], axis=1))
 
-    pos = np.concatenate([loop_pos, sparkle_pos, dust_pos])
-    col = np.concatenate([loop_col, sparkle_col, dust_col])
-    size = np.concatenate([loop_size, sparkle_size, dust_size])
+        col = np.tile(np.array([250, 245, 255], dtype=np.float32), (per_sword, 1))  # silver-white blade
+        guard_mask = t_local < 0.12
+        col[guard_mask] = np.array([190, 60, 220], dtype=np.float32)  # pink hilt/guard accent
+        blade_col_chunks.append(col)
 
-    # Tilt the whole field so the paired loops sweep diagonally across
-    # the frame instead of sitting flat/upright - matches the reference.
-    pos = rotate_x(pos, np.radians(70))
-    pos = rotate_z(pos, np.radians(35))
+    blade_pos = np.concatenate(blade_chunks)
+    blade_col = np.concatenate(blade_col_chunks)
+    blade_size = np.full(blade_pos.shape[0], 0.85, dtype=np.float32)
+
+    haze_pos = _sphere_shell(n_haze, 10, 70, rng)
+    haze_col = np.tile(np.array([120, 70, 150], dtype=np.float32), (n_haze, 1))  # soft violet-pink haze
+    haze_size = np.full(n_haze, 0.45, dtype=np.float32)
+
+    pos = np.concatenate([ground_pos, pillar_pos, roof_pos, blade_pos, haze_pos])
+    col = np.concatenate([ground_col, pillar_col, roof_col, blade_col, haze_col])
+    size = np.concatenate([ground_size, pillar_size, roof_size, blade_size, haze_size])
     return pos, col, size
 
 
