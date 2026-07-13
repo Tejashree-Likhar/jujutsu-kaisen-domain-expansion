@@ -395,70 +395,63 @@ def shape_jogo(n, seed=5):
 
 
 def shape_yuta(n, seed=6):
-    """Authentic Mutual Love: a ring facing the viewer at a shallow angle,
-    encircled by katana standing upright, piercing through its
-    circumference like a crown of blades."""
+    """Authentic Mutual Love: two overlapping wedding-ring loops (the
+    'intertwined wedding knots') forming one long, flattened
+    infinity-like sweep across the frame, with a bright pink core and
+    a soft white sparkle haze pooling around each loop's center - the
+    katana read here as glowing white light bleeding out of the rings
+    rather than distinct upright blades. The whole field is tilted so
+    it reads as a diagonal streak, matching the reference cast image."""
     rng = np.random.default_rng(seed)
-    n_blades = int(n * 0.40)
-    n_knot = int(n * 0.28)
-    n_dust = n - n_blades - n_knot
+    n_loops = int(n * 0.42)
+    n_sparkle = int(n * 0.36)
+    n_dust = n - n_loops - n_sparkle
 
-    # Ring / knot motif: built facing the camera, then tilted only
-    # modestly so it reads as a clean halo/oval (a steeper tilt makes the
-    # near/far edges scale so unevenly under perspective that the ring
-    # reads as a tall vertical sliver instead of a ring).
-    TILT = np.radians(25)
-    R, r_minor = 24, 6
-    main_angle = rng.random(n_knot) * 2 * np.pi
-    tube_angle = rng.random(n_knot) * 2 * np.pi
-    knot_pos = np.stack([
-        (R + r_minor * np.cos(tube_angle)) * np.cos(main_angle),
-        (R + r_minor * np.cos(tube_angle)) * np.sin(main_angle),
-        r_minor * np.sin(tube_angle),
-    ], axis=1)
-    knot_pos = rotate_x(knot_pos, TILT)
-    knot_col = np.tile(np.array([170, 20, 255], dtype=np.float32), (n_knot, 1))  # vibrant pink
-    knot_size = np.full(n_knot, 1.1, dtype=np.float32)
+    R, thickness = 34, 5
+    flatten = 0.55  # squashes each loop into a wide ellipse, not a circle
+    centers_x = (-R * 0.65, R * 0.65)  # two ring centers, side by side
 
-    # Katana standing upright (extending in world-Y, like stakes), each
-    # anchored to a point on the ring's circumference - anchors are
-    # computed by tilting the same pre-tilt angle used for the ring, so
-    # the blades pierce through exactly where the ring sits. Because the
-    # blades stay vertical rather than following the ring's tilt, the
-    # whole thing spins cleanly around the vertical axis with no
-    # crossing/"+" artifacts.
-    n_swords = 26
-    per_sword = max(1, n_blades // n_swords)
-    blade_chunks, blade_col_chunks = [], []
-    for i in range(n_swords):
-        angle = i * (2 * np.pi / n_swords) + rng.uniform(-0.05, 0.05)
-        anchor_r = R + rng.uniform(-2, 2)
-        anchor_local = np.array([[anchor_r * np.cos(angle), anchor_r * np.sin(angle), 0.0]], dtype=np.float32)
-        ax, ay, az = rotate_x(anchor_local, TILT)[0]
-        length = rng.uniform(18, 28)
+    def _ring_loop(n_pts, cx, rng):
+        theta = rng.random(n_pts) * 2 * np.pi
+        rr = R + (rng.random(n_pts) - 0.5) * thickness
+        x = cx + rr * np.cos(theta)
+        y = rr * np.sin(theta) * flatten
+        z = (rng.random(n_pts) - 0.5) * thickness
+        return np.stack([x, y, z], axis=1)
 
-        t_local = rng.random(per_sword)  # 0 = tip below the ring, 1 = tip above
-        y = ay + (t_local - 0.3) * length
-        x = ax + rng.normal(scale=0.6, size=per_sword)
-        z = az + rng.normal(scale=0.6, size=per_sword)
-        blade_chunks.append(np.stack([x, y, z], axis=1))
+    per_loop = n_loops // 2
+    loopA_pos = _ring_loop(per_loop, centers_x[0], rng)
+    loopB_pos = _ring_loop(n_loops - per_loop, centers_x[1], rng)
+    loop_pos = np.concatenate([loopA_pos, loopB_pos])
+    loop_col = np.tile(np.array([190, 30, 255], dtype=np.float32), (loop_pos.shape[0], 1))  # vibrant pink
+    loop_size = np.full(loop_pos.shape[0], 1.3, dtype=np.float32)
 
-        col = np.tile(np.array([235, 230, 255], dtype=np.float32), (per_sword, 1))  # silver-white blade
-        guard_mask = (t_local > 0.26) & (t_local < 0.34)
-        col[guard_mask] = np.array([210, 90, 150], dtype=np.float32)  # small pink hilt/guard accent
-        blade_col_chunks.append(col)
+    # Bright white-pink sparkle haze pooling around each loop's center -
+    # denser near the middle of each ring, thinning toward its edge, which
+    # is what reads as the soft glowing "poof" at each end of the shape.
+    which = rng.integers(0, 2, n_sparkle)
+    cx = np.where(which == 0, centers_x[0], centers_x[1])
+    ang = rng.random(n_sparkle) * 2 * np.pi
+    rad = (R + thickness * 2) * np.sqrt(rng.random(n_sparkle))
+    x = cx + rad * np.cos(ang)
+    y = rad * np.sin(ang) * flatten
+    z = rng.normal(scale=thickness * 1.6, size=n_sparkle)
+    sparkle_pos = np.stack([x, y, z], axis=1)
+    sparkle_col = np.tile(np.array([255, 240, 255], dtype=np.float32), (n_sparkle, 1))  # near-white
+    sparkle_size = np.full(n_sparkle, 0.7, dtype=np.float32)
 
-    blade_pos = np.concatenate(blade_chunks)
-    blade_col = np.concatenate(blade_col_chunks)
-    blade_size = np.full(blade_pos.shape[0], 0.85, dtype=np.float32)
-
-    dust_pos = _sphere_shell(n_dust, 15, 90, rng)
+    dust_pos = _sphere_shell(n_dust, 20, 100, rng)
     dust_col = np.tile(np.array([200, 150, 255], dtype=np.float32), (n_dust, 1))  # soft pink sparkle
-    dust_size = np.full(n_dust, 0.5, dtype=np.float32)
+    dust_size = np.full(n_dust, 0.45, dtype=np.float32)
 
-    pos = np.concatenate([knot_pos, blade_pos, dust_pos])
-    col = np.concatenate([knot_col, blade_col, dust_col])
-    size = np.concatenate([knot_size, blade_size, dust_size])
+    pos = np.concatenate([loop_pos, sparkle_pos, dust_pos])
+    col = np.concatenate([loop_col, sparkle_col, dust_col])
+    size = np.concatenate([loop_size, sparkle_size, dust_size])
+
+    # Tilt the whole field so the paired loops sweep diagonally across
+    # the frame instead of sitting flat/upright - matches the reference.
+    pos = rotate_x(pos, np.radians(70))
+    pos = rotate_z(pos, np.radians(35))
     return pos, col, size
 
 
