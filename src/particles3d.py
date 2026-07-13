@@ -43,20 +43,6 @@ def _ring(n, radius, thickness, rng):
     return np.stack([x, y, z], axis=1)
 
 
-def _infinity(n, radius, thickness, rng):
-    """n random points scattered along a figure-eight / infinity symbol
-    (lemniscate of Bernoulli) of the given lobe radius, with some jitter
-    to give it visible thickness."""
-    t = rng.random(n) * 2 * np.pi
-    denom = 1 + np.sin(t) ** 2
-    x = radius * np.cos(t) / denom
-    y = radius * np.sin(t) * np.cos(t) / denom
-    x += (rng.random(n) - 0.5) * thickness
-    y += (rng.random(n) - 0.5) * thickness
-    z = (rng.random(n) - 0.5) * thickness
-    return np.stack([x, y, z], axis=1)
-
-
 def _ground_plane(n, half_size, y_level, rng, y_jitter=1.5):
     x = (rng.random(n) - 0.5) * 2 * half_size
     z = (rng.random(n) - 0.5) * 2 * half_size
@@ -148,7 +134,7 @@ def shape_gojo(n, seed=1):
     n_dust_gold = int(n * 0.25)
     n_rest = n - n_ring - n_dust_gold
 
-    ring_pos = _infinity(n_ring, radius=30, thickness=3, rng=rng)
+    ring_pos = _ring(n_ring, radius=26, thickness=3, rng=rng)
     ring_col = np.tile(np.array([180, 230, 255], dtype=np.float32), (n_ring, 1))  # bright gold-white
     ring_size = np.full(n_ring, 2.2, dtype=np.float32)
 
@@ -254,77 +240,97 @@ def shape_megumi(n, seed=3):
 
 
 def shape_mahito(n, seed=4):
-    """Self-Embodiment of Perfection: a figure lying down, pinned beneath
-    a net of countless interlocking arms draped directly over it."""
+    """Self-Embodiment of Perfection: an empty spherical cage woven from
+    latitude/longitude netting, glowing node-spheres at every crossing,
+    hovering over a cracked floor. Tilted so we're looking down into the
+    dome from above, like the dome resting in a crater - nothing trapped
+    inside, just the endless mesh itself."""
     rng = np.random.default_rng(seed)
-    n_human = int(n * 0.32)
-    n_net = int(n * 0.53)
-    n_ambient = n - n_human - n_net
+    n_grid = int(n * 0.50)
+    n_nodes = int(n * 0.16)
+    n_ground = int(n * 0.10)
+    n_ambient = n - n_grid - n_nodes - n_ground
 
-    y0 = -20  # the ground the figure lies on
-    human_col_base = np.array([140, 165, 215], dtype=np.float32)  # bright warm skin
+    R = 42
+    cy = 4  # dome center sits a bit above the ground
 
-    n_leg = int(n_human * 0.11)
-    n_torso = int(n_human * 0.20)
-    n_head = int(n_human * 0.12)
-    n_arm = (n_human - 2 * n_leg - n_torso - n_head) // 2
+    n_lat = 9   # horizontal rings
+    n_lon = 16  # pole-to-pole arcs
+    lat_cos = np.linspace(-0.9, 0.95, n_lat)  # cos(phi) for each ring
 
-    left_leg = _capsule(n_leg, (-6, y0, -4), (-27, y0, -4), 1.6, rng)
-    right_leg = _capsule(n_leg, (-6, y0, 4), (-27, y0, 4), 1.6, rng)
-    torso = _capsule(n_torso, (-6, y0, 0), (10, y0, 0), 3.4, rng)
-    head = _sphere_shell(n_head, 0, 4.4, rng) + np.array([20, y0, 0], dtype=np.float32)
-    left_arm = _capsule(n_arm, (8, y0, -5), (15, y0 + 6, -6), 1.4, rng)
-    right_arm = _capsule(n_arm, (8, y0, 5), (15, y0 + 6, 6), 1.4, rng)
-
-    human_pos = np.concatenate([left_leg, right_leg, torso, head, left_arm, right_arm])
-    human_col = np.tile(human_col_base, (human_pos.shape[0], 1))
-    human_size = np.full(human_pos.shape[0], 1.5, dtype=np.float32)
-
-    # Net draped directly over the body: many "ribs" spanning across its
-    # width (sagging slightly as they cross over/around the body) plus a
-    # few strands running along its length, so it reads as a mesh pinning
-    # the figure down rather than a dome looming far overhead.
-    n_ribs = 26
-    n_long = 8
-    per_rib = max(1, int(n_net * 0.75) // n_ribs)
-    per_long = max(1, int(n_net * 0.25) // n_long)
-
-    chunks, col_chunks = [], []
-    for _ in range(n_ribs):
-        x_pos = rng.uniform(-29, 25)
-        amplitude = rng.uniform(5, 12)
-        s = rng.random(per_rib)
-        z = -20 + 40 * s
-        y = y0 + 2 + amplitude * 4 * s * (1 - s)
-        x = x_pos + rng.normal(scale=1.2, size=per_rib)
+    # --- netting: latitude rings + longitude arcs ---
+    per_lat = max(1, int(n_grid * 0.55) // n_lat)
+    per_lon = max(1, int(n_grid * 0.45) // n_lon)
+    chunks = []
+    for cphi in lat_cos:
+        phi = np.arccos(cphi)
+        ring_r = R * np.sin(phi)
+        y = R * np.cos(phi) + cy
+        theta = rng.random(per_lat) * 2 * np.pi
+        x = ring_r * np.cos(theta) + rng.normal(scale=0.4, size=per_lat)
+        z = ring_r * np.sin(theta) + rng.normal(scale=0.4, size=per_lat)
+        yy = np.full(per_lat, y) + rng.normal(scale=0.4, size=per_lat)
+        chunks.append(np.stack([x, yy, z], axis=1))
+    for i in range(n_lon):
+        theta = i * (2 * np.pi / n_lon)
+        phi = rng.random(per_lon) * np.pi
+        x = R * np.sin(phi) * np.cos(theta) + rng.normal(scale=0.4, size=per_lon)
+        z = R * np.sin(phi) * np.sin(theta) + rng.normal(scale=0.4, size=per_lon)
+        y = R * np.cos(phi) + cy + rng.normal(scale=0.4, size=per_lon)
         chunks.append(np.stack([x, y, z], axis=1))
-        hot = rng.random() < 0.12
-        base = np.array([160, 20, 140], dtype=np.float32) if hot else np.array([70, 10, 60], dtype=np.float32)
-        col_chunks.append(np.tile(base, (per_rib, 1)))
 
-    for _ in range(n_long):
-        z_pos = rng.uniform(-18, 18)
-        amplitude = rng.uniform(3, 7)
-        t = rng.random(per_long)
-        x = -29 + 54 * t
-        y = y0 + 2 + amplitude * 4 * t * (1 - t)
-        z = z_pos + rng.normal(scale=1.2, size=per_long)
-        chunks.append(np.stack([x, y, z], axis=1))
-        col_chunks.append(np.tile(np.array([75, 10, 65], dtype=np.float32), (per_long, 1)))
+    grid_pos = np.concatenate(chunks)
+    grid_col = np.tile(np.array([150, 40, 130], dtype=np.float32), (grid_pos.shape[0], 1))
+    grid_size = np.full(grid_pos.shape[0], 0.5, dtype=np.float32)
 
-    net_pos = np.concatenate(chunks)
-    net_col = np.concatenate(col_chunks)
-    net_size = np.full(net_pos.shape[0], 0.55, dtype=np.float32)
+    # --- bright node spheres at every lat/lon crossing ---
+    node_centers = []
+    for cphi in lat_cos:
+        phi = np.arccos(cphi)
+        ring_r = R * np.sin(phi)
+        y = R * np.cos(phi) + cy
+        for i in range(n_lon):
+            theta = i * (2 * np.pi / n_lon)
+            node_centers.append([ring_r * np.cos(theta), y, ring_r * np.sin(theta)])
+    node_centers = np.array(node_centers, dtype=np.float32)
+    reps = max(1, n_nodes // len(node_centers))
+    node_pos = np.repeat(node_centers, reps, axis=0)
+    node_pos = node_pos + rng.normal(scale=0.7, size=node_pos.shape)
+    node_col = np.tile(np.array([225, 140, 255], dtype=np.float32), (node_pos.shape[0], 1))
+    node_size = np.full(node_pos.shape[0], 1.7, dtype=np.float32)
 
-    ambient_pos = _sphere_shell(n_ambient, 20, 100, rng)
+    # --- cracked ground beneath the dome ---
+    ground_y = cy - R - 3
+    n_cracks = 14
+    per_crack = max(1, n_ground // n_cracks)
+    ground_chunks = []
+    for _ in range(n_cracks):
+        ang0 = rng.random() * 2 * np.pi
+        length = rng.uniform(20, 58)
+        t = rng.random(per_crack)
+        r = t * length
+        jitter_ang = ang0 + np.cumsum(rng.normal(scale=0.04, size=per_crack))
+        x = r * np.cos(jitter_ang)
+        z = r * np.sin(jitter_ang)
+        y = np.full(per_crack, ground_y) + rng.normal(scale=0.3, size=per_crack)
+        ground_chunks.append(np.stack([x, y, z], axis=1))
+    ground_pos = np.concatenate(ground_chunks)
+    ground_col = np.tile(np.array([60, 15, 55], dtype=np.float32), (ground_pos.shape[0], 1))
+    ground_size = np.full(ground_pos.shape[0], 0.5, dtype=np.float32)
+
+    ambient_pos = _sphere_shell(n_ambient, 30, 110, rng)
     ambient_col = np.tile(np.array([55, 8, 45], dtype=np.float32), (n_ambient, 1))
     ambient_size = np.full(n_ambient, 0.4, dtype=np.float32)
 
-    pos = np.concatenate([human_pos, net_pos, ambient_pos])
-    col = np.concatenate([human_col, net_col, ambient_col])
-    size = np.concatenate([human_size, net_size, ambient_size])
+    pos = np.concatenate([grid_pos, node_pos, ground_pos, ambient_pos])
+    col = np.concatenate([grid_col, node_col, ground_col, ambient_col])
+    size = np.concatenate([grid_size, node_size, ground_size, ambient_size])
 
-    pos = pos * 1.6   # scale the whole shape up so it fills more of the frame
+    # Tilt so the near/top of the dome swings toward the camera and grows
+    # large in frame while the far side recedes - the "looking down into
+    # it from above" fisheye read from the reference image.
+    pos = rotate_x(pos, np.radians(36))
+    pos = pos * 1.25
     return pos, col, size
 
 
@@ -364,7 +370,8 @@ def shape_jogo(n, seed=5):
 
 def shape_yuta(n, seed=6):
     """Authentic Mutual Love: a clearly visible ring facing the viewer,
-    surrounded by katana standing vertically around its circumference."""
+    encircled by katana lying flat, radiating outward like spokes in the
+    ring's own plane."""
     rng = np.random.default_rng(seed)
     n_blades = int(n * 0.40)
     n_knot = int(n * 0.28)
@@ -386,23 +393,24 @@ def shape_yuta(n, seed=6):
     knot_col = np.tile(np.array([170, 20, 255], dtype=np.float32), (n_knot, 1))  # vibrant pink
     knot_size = np.full(n_knot, 1.1, dtype=np.float32)
 
-    # Katana standing vertically, arranged around the ring's circumference
-    # (also in the XY plane) so each blade reads as an upright line on
-    # screen no matter where it sits around the circle.
+    # Katana laid flat, radiating outward from the ring like spokes -
+    # built in the SAME plane as the ring (before its tilt) and then
+    # tilted together with it, so each blade stays coplanar with the
+    # ring's circumference no matter how the whole shape spins.
     n_swords = 26
     per_sword = max(1, n_blades // n_swords)
     Rs = R + 17
     blade_chunks, blade_col_chunks = [], []
     for i in range(n_swords):
         angle = i * (2 * np.pi / n_swords) + rng.uniform(-0.05, 0.05)
-        slot_x = Rs * np.cos(angle)
-        slot_y = Rs * np.sin(angle)
+        dir_x, dir_y = np.cos(angle), np.sin(angle)
         length = rng.uniform(16, 26)
 
         t_local = rng.random(per_sword)  # 0 = hilt (near ring), 1 = tip (outward)
-        x = slot_x + rng.normal(scale=0.6, size=per_sword)
-        y = slot_y + (t_local - 0.5) * length
-        z = (rng.random(per_sword) - 0.5) * 6
+        r = Rs + (t_local - 0.15) * length
+        x = r * dir_x + rng.normal(scale=0.6, size=per_sword)
+        y = r * dir_y + rng.normal(scale=0.6, size=per_sword)
+        z = (rng.random(per_sword) - 0.5) * 3
         blade_chunks.append(np.stack([x, y, z], axis=1))
 
         col = np.tile(np.array([235, 230, 255], dtype=np.float32), (per_sword, 1))  # silver-white blade
@@ -413,6 +421,7 @@ def shape_yuta(n, seed=6):
     blade_pos = np.concatenate(blade_chunks)
     blade_col = np.concatenate(blade_col_chunks)
     blade_size = np.full(blade_pos.shape[0], 0.85, dtype=np.float32)
+    blade_pos = rotate_x(blade_pos, np.radians(72))
 
     dust_pos = _sphere_shell(n_dust, 15, 90, rng)
     dust_col = np.tile(np.array([200, 150, 255], dtype=np.float32), (n_dust, 1))  # soft pink sparkle

@@ -40,8 +40,9 @@ _ACTIVE_SPIN = {
     "megumi": ("y", 0.15),
     "mahito": ("y", 0.12),
     "jogo": ("y", 0.0),
-    "yuta": ("z", 0.30),
+    "yuta": ("y", 0.30),
 }
+
 
 def _ease_in(t):
     return t * t
