@@ -25,6 +25,7 @@ DOMAINS = {
         "color_primary": (255, 120, 0),    # vivid blue (BGR)
         "color_secondary": (0, 215, 255),  # gold
         "bg_tint": (255, 120, 0),
+        "title_color": (255, 170, 60),     # bright blue heading text
     },
     "sukuna": {
         "key": "sukuna",
@@ -39,6 +40,7 @@ DOMAINS = {
         "color_primary": (0, 0, 255),      # red
         "color_secondary": (0, 60, 160),   # dark red / rust
         "bg_tint": (0, 0, 255),
+        "title_color": (50, 50, 255),      # bright red heading text
     },
     "megumi": {
         "key": "megumi",
@@ -46,13 +48,15 @@ DOMAINS = {
         "user_name": "Megumi Fushiguro",
         "domain_name": "Chimera Shadow Garden",
         "description": (
-            "The surroundings dissolve into a massive, shadowy, fluid "
-            "abyss capable of birthing endless Shikigami and swallowing "
-            "opponents into bottomless darkness."
+            "The battlefield dissolves into a sprawling green-lit "
+            "cityscape of towering buildings, with a lone silhouette "
+            "standing amid them - Megumi's shikigami-summoned garden of "
+            "shadows given a city's shape."
         ),
-        "color_primary": (90, 20, 0),      # deep blue-black
-        "color_secondary": (255, 255, 255),  # stark white highlight
-        "bg_tint": (80, 10, 0),
+        "color_primary": (40, 200, 90),    # vivid green (BGR)
+        "color_secondary": (140, 255, 180),  # bright lime highlight
+        "bg_tint": (40, 200, 90),
+        "title_color": (80, 230, 110),     # bright green heading text
     },
     "mahito": {
         "key": "mahito",
@@ -67,6 +71,7 @@ DOMAINS = {
         "color_primary": (60, 0, 40),      # deep black-purple
         "color_secondary": (200, 0, 160),  # purple
         "bg_tint": (80, 0, 90),
+        "title_color": (230, 60, 200),     # bright violet heading text
     },
     "jogo": {
         "key": "jogo",
@@ -81,6 +86,7 @@ DOMAINS = {
         "color_primary": (0, 30, 200),     # deep red
         "color_secondary": (0, 120, 255),  # orange
         "bg_tint": (0, 40, 200),
+        "title_color": (30, 110, 255),     # bright orange-red heading text
     },
     "yuta": {
         "key": "yuta",
@@ -95,6 +101,7 @@ DOMAINS = {
         "color_primary": (180, 20, 255),   # vibrant pink
         "color_secondary": (255, 255, 255),  # white
         "bg_tint": (180, 20, 255),
+        "title_color": (200, 60, 255),     # bright pink heading text
     },
 }
 

@@ -36,13 +36,13 @@ def draw_info_panel(frame, domain_cfg):
 
     y = 34
     cv2.putText(frame, f"Domain Expansion: {domain_cfg['domain_name']}",
-                (16, y), FONT, 0.78, (255, 255, 255), 2, cv2.LINE_AA)
+                (16, y), FONT, 0.78, domain_cfg["title_color"], 2, cv2.LINE_AA)
     y += 32
     cv2.putText(frame, f"User: {domain_cfg['user_name']}",
-                (16, y), FONT, 0.65, (200, 220, 255), 2, cv2.LINE_AA)
+                (16, y), FONT, 0.65, (255, 255, 255), 2, cv2.LINE_AA)
     y += 30
     for line in lines:
-        cv2.putText(frame, line, (16, y), FONT, 0.55, (230, 230, 230), 1, cv2.LINE_AA)
+        cv2.putText(frame, line, (16, y), FONT, 0.55, (255, 255, 255), 1, cv2.LINE_AA)
         y += 22
 
     return frame

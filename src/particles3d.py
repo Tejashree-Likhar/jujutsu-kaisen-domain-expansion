@@ -43,6 +43,20 @@ def _ring(n, radius, thickness, rng):
     return np.stack([x, y, z], axis=1)
 
 
+def _infinity(n, radius, thickness, rng):
+    """n random points scattered along a figure-eight / infinity symbol
+    (lemniscate of Bernoulli) of the given lobe radius, with some jitter
+    to give it visible thickness."""
+    t = rng.random(n) * 2 * np.pi
+    denom = 1 + np.sin(t) ** 2
+    x = radius * np.cos(t) / denom
+    y = radius * np.sin(t) * np.cos(t) / denom
+    x += (rng.random(n) - 0.5) * thickness
+    y += (rng.random(n) - 0.5) * thickness
+    z = (rng.random(n) - 0.5) * thickness
+    return np.stack([x, y, z], axis=1)
+
+
 def _ground_plane(n, half_size, y_level, rng, y_jitter=1.5):
     x = (rng.random(n) - 0.5) * 2 * half_size
     z = (rng.random(n) - 0.5) * 2 * half_size
@@ -63,6 +77,47 @@ def _spiral_arms(n, arms, max_radius, rise, rng, tightness=12.0):
 
 def _lerp_color(c1, c2, t):
     return c1 + (np.array(c2, dtype=np.float32) - np.array(c1, dtype=np.float32)) * t[:, None]
+
+
+def _capsule(n, p0, p1, radius, rng):
+    """n points scattered along the segment p0->p1 with gaussian jitter -
+    a cheap stand-in for a "limb" in a stylized point-cloud figure."""
+    if n <= 0:
+        return np.zeros((0, 3), dtype=np.float32)
+    t = rng.random(n)
+    p0 = np.array(p0, dtype=np.float32)
+    p1 = np.array(p1, dtype=np.float32)
+    base = p0[None, :] + t[:, None] * (p1 - p0)[None, :]
+    jitter = rng.normal(scale=radius, size=(n, 3)).astype(np.float32)
+    return base + jitter
+
+
+def _human_figure(n, rng, origin=(0.0, 0.0, 0.0), scale=1.0, reach_up=True):
+    """A very stylized standing humanoid point-cloud: two legs, torso, head,
+    two arms (reaching up and outward if reach_up, otherwise hanging)."""
+    ox, oy, oz = origin
+
+    def pt(x, y, z):
+        return (ox + x * scale, oy + y * scale, oz + z * scale)
+
+    n_leg = int(n * 0.12)
+    n_torso = int(n * 0.20)
+    n_head = int(n * 0.12)
+    n_arm = (n - 2 * n_leg - n_torso - n_head) // 2
+
+    left_leg = _capsule(n_leg, pt(-5, -8, 0), pt(-5, -28, 0), 1.6 * scale, rng)
+    right_leg = _capsule(n_leg, pt(5, -8, 0), pt(5, -28, 0), 1.6 * scale, rng)
+    torso = _capsule(n_torso, pt(0, -8, 0), pt(0, 10, 0), 3.2 * scale, rng)
+    head = _sphere_shell(n_head, 0, 4.2 * scale, rng) + np.array(pt(0, 16, 0), dtype=np.float32)
+
+    if reach_up:
+        left_arm = _capsule(n_arm, pt(-6, 9, 0), pt(-20, 26, 5), 1.4 * scale, rng)
+        right_arm = _capsule(n_arm, pt(6, 9, 0), pt(20, 26, 5), 1.4 * scale, rng)
+    else:
+        left_arm = _capsule(n_arm, pt(-6, 9, 0), pt(-9, -6, 0), 1.4 * scale, rng)
+        right_arm = _capsule(n_arm, pt(6, 9, 0), pt(9, -6, 0), 1.4 * scale, rng)
+
+    return np.concatenate([left_leg, right_leg, torso, head, left_arm, right_arm])
 
 
 # ---------------------------------------------------------------------------
@@ -93,7 +148,7 @@ def shape_gojo(n, seed=1):
     n_dust_gold = int(n * 0.25)
     n_rest = n - n_ring - n_dust_gold
 
-    ring_pos = _ring(n_ring, radius=26, thickness=3, rng=rng)
+    ring_pos = _infinity(n_ring, radius=30, thickness=3, rng=rng)
     ring_col = np.tile(np.array([180, 230, 255], dtype=np.float32), (n_ring, 1))  # bright gold-white
     ring_size = np.full(n_ring, 2.2, dtype=np.float32)
 
@@ -158,49 +213,118 @@ def shape_sukuna(n, seed=2):
 
 
 def shape_megumi(n, seed=3):
-    """Chimera Shadow Garden: a vast dark, fluid abyss with sparse stark
-    white highlights and reaching shadow tendrils."""
+    """Chimera Shadow Garden (green edition): a dense skyline of tall
+    buildings in green-lit tones, with no figure among them."""
     rng = np.random.default_rng(seed)
-    n_void = int(n * 0.55)
-    n_highlight = int(n * 0.15)
-    n_tendrils = n - n_void - n_highlight
+    n_buildings_total = int(n * 0.78)
+    n_ambient = n - n_buildings_total
 
-    void_pos = _sphere_shell(n_void, 10, 100, rng)
-    void_col = np.tile(np.array([35, 15, 5], dtype=np.float32), (n_void, 1))  # near-black deep blue
-    void_size = np.full(n_void, 0.55, dtype=np.float32)
+    n_buildings = 13
+    per_building = n_buildings_total // n_buildings
+    centers = np.linspace(-75, 75, n_buildings)
+    b_pos_chunks, b_col_chunks = [], []
+    for i, cx in enumerate(centers):
+        cx = cx + rng.uniform(-4, 4)
+        width = rng.uniform(8, 15)
+        height = rng.uniform(22, 82)
+        depth_center = rng.uniform(-5, 50)  # some buildings recede further back
+        x = cx + (rng.random(per_building) - 0.5) * width
+        y = -30 + rng.random(per_building) * height
+        z = depth_center + (rng.random(per_building) - 0.5) * 6
+        b_pos_chunks.append(np.stack([x, y, z], axis=1))
 
-    hi_pos = _sphere_shell(n_highlight, 15, 55, rng)
-    hi_col = np.tile(np.array([255, 250, 245], dtype=np.float32), (n_highlight, 1))  # stark white
-    hi_size = np.full(n_highlight, 1.4, dtype=np.float32)
+        base_green = np.array([15, 60, 25], dtype=np.float32)  # dark building silhouette
+        col = np.tile(base_green, (per_building, 1))
+        window_mask = rng.random(per_building) < 0.07
+        col[window_mask] = np.array([120, 255, 160], dtype=np.float32)  # lit windows
+        b_col_chunks.append(col)
 
-    tendril_pos = _spiral_arms(n_tendrils, arms=5, max_radius=85, rise=70, rng=rng, tightness=9.0)
-    tendril_col = np.tile(np.array([90, 35, 10], dtype=np.float32), (n_tendrils, 1))  # dark blue tendrils
-    tendril_size = np.full(n_tendrils, 0.6, dtype=np.float32)
+    building_pos = np.concatenate(b_pos_chunks)
+    building_col = np.concatenate(b_col_chunks)
+    building_size = np.full(building_pos.shape[0], 0.65, dtype=np.float32)
 
-    pos = np.concatenate([void_pos, hi_pos, tendril_pos])
-    col = np.concatenate([void_col, hi_col, tendril_col])
-    size = np.concatenate([void_size, hi_size, tendril_size])
+    ambient_pos = _sphere_shell(n_ambient, 30, 100, rng)
+    ambient_col = np.tile(np.array([40, 140, 60], dtype=np.float32), (n_ambient, 1))  # green haze
+    ambient_size = np.full(n_ambient, 0.45, dtype=np.float32)
+
+    pos = np.concatenate([building_pos, ambient_pos])
+    col = np.concatenate([building_col, ambient_col])
+    size = np.concatenate([building_size, ambient_size])
     return pos, col, size
 
 
 def shape_mahito(n, seed=4):
-    """Self-Embodiment of Perfection: a writhing, knotted mass of many
-    interlocking spiral 'arms' in black and violet, dense at the core."""
+    """Self-Embodiment of Perfection: a figure lying down, pinned beneath
+    a net of countless interlocking arms draped directly over it."""
     rng = np.random.default_rng(seed)
-    n_core = int(n * 0.12)
-    n_arms = n - n_core
+    n_human = int(n * 0.32)
+    n_net = int(n * 0.53)
+    n_ambient = n - n_human - n_net
 
-    core_pos = _sphere_shell(n_core, 0, 9, rng)
-    core_col = np.tile(np.array([120, 10, 90], dtype=np.float32), (n_core, 1))  # hot violet core
-    core_size = np.full(n_core, 2.0, dtype=np.float32)
+    y0 = -20  # the ground the figure lies on
+    human_col_base = np.array([140, 165, 215], dtype=np.float32)  # bright warm skin
 
-    arm_pos = _spiral_arms(n_arms, arms=7, max_radius=55, rise=50, rng=rng, tightness=16.0)
-    arm_col = np.tile(np.array([100, 15, 90], dtype=np.float32), (n_arms, 1))  # deep purple-black
-    arm_size = np.full(n_arms, 0.85, dtype=np.float32)
+    n_leg = int(n_human * 0.11)
+    n_torso = int(n_human * 0.20)
+    n_head = int(n_human * 0.12)
+    n_arm = (n_human - 2 * n_leg - n_torso - n_head) // 2
 
-    pos = np.concatenate([core_pos, arm_pos])
-    col = np.concatenate([core_col, arm_col])
-    size = np.concatenate([core_size, arm_size])
+    left_leg = _capsule(n_leg, (-6, y0, -4), (-27, y0, -4), 1.6, rng)
+    right_leg = _capsule(n_leg, (-6, y0, 4), (-27, y0, 4), 1.6, rng)
+    torso = _capsule(n_torso, (-6, y0, 0), (10, y0, 0), 3.4, rng)
+    head = _sphere_shell(n_head, 0, 4.4, rng) + np.array([20, y0, 0], dtype=np.float32)
+    left_arm = _capsule(n_arm, (8, y0, -5), (15, y0 + 6, -6), 1.4, rng)
+    right_arm = _capsule(n_arm, (8, y0, 5), (15, y0 + 6, 6), 1.4, rng)
+
+    human_pos = np.concatenate([left_leg, right_leg, torso, head, left_arm, right_arm])
+    human_col = np.tile(human_col_base, (human_pos.shape[0], 1))
+    human_size = np.full(human_pos.shape[0], 1.5, dtype=np.float32)
+
+    # Net draped directly over the body: many "ribs" spanning across its
+    # width (sagging slightly as they cross over/around the body) plus a
+    # few strands running along its length, so it reads as a mesh pinning
+    # the figure down rather than a dome looming far overhead.
+    n_ribs = 26
+    n_long = 8
+    per_rib = max(1, int(n_net * 0.75) // n_ribs)
+    per_long = max(1, int(n_net * 0.25) // n_long)
+
+    chunks, col_chunks = [], []
+    for _ in range(n_ribs):
+        x_pos = rng.uniform(-29, 25)
+        amplitude = rng.uniform(5, 12)
+        s = rng.random(per_rib)
+        z = -20 + 40 * s
+        y = y0 + 2 + amplitude * 4 * s * (1 - s)
+        x = x_pos + rng.normal(scale=1.2, size=per_rib)
+        chunks.append(np.stack([x, y, z], axis=1))
+        hot = rng.random() < 0.12
+        base = np.array([160, 20, 140], dtype=np.float32) if hot else np.array([70, 10, 60], dtype=np.float32)
+        col_chunks.append(np.tile(base, (per_rib, 1)))
+
+    for _ in range(n_long):
+        z_pos = rng.uniform(-18, 18)
+        amplitude = rng.uniform(3, 7)
+        t = rng.random(per_long)
+        x = -29 + 54 * t
+        y = y0 + 2 + amplitude * 4 * t * (1 - t)
+        z = z_pos + rng.normal(scale=1.2, size=per_long)
+        chunks.append(np.stack([x, y, z], axis=1))
+        col_chunks.append(np.tile(np.array([75, 10, 65], dtype=np.float32), (per_long, 1)))
+
+    net_pos = np.concatenate(chunks)
+    net_col = np.concatenate(col_chunks)
+    net_size = np.full(net_pos.shape[0], 0.55, dtype=np.float32)
+
+    ambient_pos = _sphere_shell(n_ambient, 20, 100, rng)
+    ambient_col = np.tile(np.array([55, 8, 45], dtype=np.float32), (n_ambient, 1))
+    ambient_size = np.full(n_ambient, 0.4, dtype=np.float32)
+
+    pos = np.concatenate([human_pos, net_pos, ambient_pos])
+    col = np.concatenate([human_col, net_col, ambient_col])
+    size = np.concatenate([human_size, net_size, ambient_size])
+
+    pos = pos * 1.6   # scale the whole shape up so it fills more of the frame
     return pos, col, size
 
 
@@ -239,49 +363,64 @@ def shape_jogo(n, seed=5):
 
 
 def shape_yuta(n, seed=6):
-    """Authentic Mutual Love: a ring of hovering katana blades around an
-    intertwined knot, in vibrant pink and white."""
+    """Authentic Mutual Love: a clearly visible ring facing the viewer,
+    surrounded by katana standing vertically around its circumference."""
     rng = np.random.default_rng(seed)
-    n_blades = int(n * 0.35)
-    n_knot = int(n * 0.30)
+    n_blades = int(n * 0.40)
+    n_knot = int(n * 0.28)
     n_dust = n - n_blades - n_knot
 
-    n_swords = 24
-    per_sword = max(1, n_blades // n_swords)
-    blade_chunks = []
-    for i in range(n_swords):
-        ang = i * (2 * np.pi / n_swords)
-        length = rng.uniform(18, 30)
-        t = rng.random(per_sword)
-        r = 30 + t * length
-        x = r * np.cos(ang)
-        z = r * np.sin(ang)
-        y = np.sin(ang * 3) * 10 + (rng.random(per_sword) - 0.5) * 2
-        blade_chunks.append(np.stack([x, y, z], axis=1))
-    blade_pos = np.concatenate(blade_chunks) if blade_chunks else np.zeros((0, 3))
-    n_blades_actual = blade_pos.shape[0]
-    blade_col = np.tile(np.array([235, 230, 255], dtype=np.float32), (n_blades_actual, 1))  # silver-white
-    blade_size = np.full(n_blades_actual, 0.9, dtype=np.float32)
-
-    # torus knot for the wedding knot motif
-    t = rng.random(n_knot) * 2 * np.pi
-    R, r_minor = 22, 7
+    # Ring / knot motif: built facing the camera, then tilted toward
+    # horizontal so it reads like a ring resting on a flat surface (seen
+    # at an angle) rather than a flat line seen edge-on or a coin facing
+    # you dead-on.
+    R, r_minor = 24, 6
+    main_angle = rng.random(n_knot) * 2 * np.pi
     tube_angle = rng.random(n_knot) * 2 * np.pi
     knot_pos = np.stack([
-        (R + r_minor * np.cos(tube_angle)) * np.cos(t * 2),
+        (R + r_minor * np.cos(tube_angle)) * np.cos(main_angle),
+        (R + r_minor * np.cos(tube_angle)) * np.sin(main_angle),
         r_minor * np.sin(tube_angle),
-        (R + r_minor * np.cos(tube_angle)) * np.sin(t * 2),
     ], axis=1)
+    knot_pos = rotate_x(knot_pos, np.radians(72))
     knot_col = np.tile(np.array([170, 20, 255], dtype=np.float32), (n_knot, 1))  # vibrant pink
-    knot_size = np.full(n_knot, 1.0, dtype=np.float32)
+    knot_size = np.full(n_knot, 1.1, dtype=np.float32)
+
+    # Katana standing vertically, arranged around the ring's circumference
+    # (also in the XY plane) so each blade reads as an upright line on
+    # screen no matter where it sits around the circle.
+    n_swords = 26
+    per_sword = max(1, n_blades // n_swords)
+    Rs = R + 17
+    blade_chunks, blade_col_chunks = [], []
+    for i in range(n_swords):
+        angle = i * (2 * np.pi / n_swords) + rng.uniform(-0.05, 0.05)
+        slot_x = Rs * np.cos(angle)
+        slot_y = Rs * np.sin(angle)
+        length = rng.uniform(16, 26)
+
+        t_local = rng.random(per_sword)  # 0 = hilt (near ring), 1 = tip (outward)
+        x = slot_x + rng.normal(scale=0.6, size=per_sword)
+        y = slot_y + (t_local - 0.5) * length
+        z = (rng.random(per_sword) - 0.5) * 6
+        blade_chunks.append(np.stack([x, y, z], axis=1))
+
+        col = np.tile(np.array([235, 230, 255], dtype=np.float32), (per_sword, 1))  # silver-white blade
+        guard_mask = (t_local > 0.06) & (t_local < 0.14)
+        col[guard_mask] = np.array([210, 90, 150], dtype=np.float32)  # small pink hilt/guard accent
+        blade_col_chunks.append(col)
+
+    blade_pos = np.concatenate(blade_chunks)
+    blade_col = np.concatenate(blade_col_chunks)
+    blade_size = np.full(blade_pos.shape[0], 0.85, dtype=np.float32)
 
     dust_pos = _sphere_shell(n_dust, 15, 90, rng)
     dust_col = np.tile(np.array([200, 150, 255], dtype=np.float32), (n_dust, 1))  # soft pink sparkle
     dust_size = np.full(n_dust, 0.5, dtype=np.float32)
 
-    pos = np.concatenate([blade_pos, knot_pos, dust_pos])
-    col = np.concatenate([blade_col, knot_col, dust_col])
-    size = np.concatenate([blade_size, knot_size, dust_size])
+    pos = np.concatenate([knot_pos, blade_pos, dust_pos])
+    col = np.concatenate([knot_col, blade_col, dust_col])
+    size = np.concatenate([knot_size, blade_size, dust_size])
     return pos, col, size
 
 
@@ -331,6 +470,14 @@ def get_shape_fixed(key, n):
 # ---------------------------------------------------------------------------
 # Rotation + perspective projection
 # ---------------------------------------------------------------------------
+
+def rotate_x(points, angle):
+    c, s = np.cos(angle), np.sin(angle)
+    x, y, z = points[:, 0], points[:, 1], points[:, 2]
+    y2 = y * c - z * s
+    z2 = y * s + z * c
+    return np.stack([x, y2, z2], axis=1)
+
 
 def rotate_y(points, angle):
     c, s = np.cos(angle), np.sin(angle)

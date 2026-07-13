@@ -37,12 +37,11 @@ FADE_DURATION = 1.0
 _ACTIVE_SPIN = {
     "gojo": ("y", 0.25),
     "sukuna": ("y", 0.0),
-    "megumi": ("y", 0.18),
-    "mahito": ("z", 0.35),
+    "megumi": ("y", 0.15),
+    "mahito": ("y", 0.12),
     "jogo": ("y", 0.0),
-    "yuta": ("y", 0.30),
+    "yuta": ("z", 0.30),
 }
-
 
 def _ease_in(t):
     return t * t
