@@ -4,7 +4,7 @@ Cast Jujutsu Kaisen Domain Expansions live from your webcam by holding
 up a number with your hand(s).
 
 **Domains & their numbers:**
-1. Satoru Gojo — Unlimited Void (blue)
+1. Satoru Gojo — Infinite Void (blue)
 2. Ryomen Sukuna — Malevolent Shrine (red)
 3. Megumi Fushiguro — Chimera Shadow Garden (deep blue-black + white)
 4. Mahito — Self-Embodiment of Perfection (black + purple)
