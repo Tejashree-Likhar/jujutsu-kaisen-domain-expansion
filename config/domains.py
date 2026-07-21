@@ -15,7 +15,7 @@ DOMAINS = {
         "key": "gojo",
         "number": 1,
         "user_name": "Satoru Gojo",
-        "domain_name": "Unlimited Void",
+        "domain_name": "Infinite Void",
         "description": (
             "An infinite, pitch-black expanse resembling the center of the "
             "universe, filled with drifting cosmic debris and swirling "
