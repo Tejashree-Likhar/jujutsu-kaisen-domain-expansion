@@ -141,7 +141,7 @@ def shape_neutral(n, seed=0):
 
 
 def shape_gojo(n, seed=1):
-    """Unlimited Void: bright event-horizon infinity loop + a deep cosmic
+    """Infinite Void: bright event-horizon infinity loop + a deep cosmic
     shell of blue debris flecked with golden galactic dust."""
     rng = np.random.default_rng(seed)
     n_ring = int(n * 0.12)
